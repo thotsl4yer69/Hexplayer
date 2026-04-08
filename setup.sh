@@ -117,9 +117,14 @@ else
     }
 fi
 
-# Customise the Raspotify device name
+# Customise the Raspotify device name.
+# Read DEVICE_NAME from .env if it exists, otherwise fall back to 'HexPlayer'.
 RASPOTIFY_CONF="/etc/raspotify/conf"
 if [[ -f "$RASPOTIFY_CONF" ]] && grep -q "LIBRESPOT_NAME" "$RASPOTIFY_CONF"; then
+    # Source .env to pick up DEVICE_NAME if the user has already edited it
+    if [[ -f "$SCRIPT_DIR/.env" ]]; then
+        DEVICE_NAME="$(grep -E '^DEVICE_NAME=' "$SCRIPT_DIR/.env" | cut -d= -f2- | tr -d '"' | tr -d "'")"
+    fi
     DEVICE_NAME="${DEVICE_NAME:-HexPlayer}"
     sudo sed -i "s|^#*LIBRESPOT_NAME=.*|LIBRESPOT_NAME=\"${DEVICE_NAME}\"|" "$RASPOTIFY_CONF"
     ok "Raspotify device name set to '${DEVICE_NAME}'"

@@ -1,10 +1,9 @@
 [Unit]
 Description=HexPlayer — NFC Spotify tile player
 Documentation=https://github.com/thotsl4yer69/Hexplayer
+# Wait for network and Raspotify so the Spotify Connect device is available
 After=network-online.target raspotify.service
 Wants=network-online.target
-# Wait for Raspotify to start so the Spotify Connect device is available
-After=raspotify.service
 
 [Service]
 Type=simple
