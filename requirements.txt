@@ -1,0 +1,17 @@
+# HexPlayer Python dependencies
+# Install inside a virtualenv:  pip install -r requirements.txt
+
+# Spotify Web API client
+spotipy>=2.23.0
+
+# Environment variable loading
+python-dotenv>=1.0.0
+
+# NFC / RFID – Bookworm-compatible RC522 driver (replaces legacy mfrc522 + RPi.GPIO)
+pi-rc522>=2.2.1
+
+# GPIO abstraction (used by pi-rc522 on Bookworm)
+gpiozero>=2.0
+
+# Requests (pulled in by spotipy, pinned for security)
+requests>=2.31.0
