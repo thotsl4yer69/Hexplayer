@@ -1,0 +1,42 @@
+# HexPlayer - gitignore
+
+# Secrets and credentials
+.env
+
+# Tile registry (contains user-specific NFC mappings)
+tiles.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Logs
+*.log
+logs/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+.env/
+.venv/
+venv/
+ENV/

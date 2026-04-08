@@ -1,0 +1,27 @@
+[Unit]
+Description=HexPlayer — NFC Spotify tile player
+Documentation=https://github.com/thotsl4yer69/Hexplayer
+After=network-online.target raspotify.service
+Wants=network-online.target
+# Wait for Raspotify to start so the Spotify Connect device is available
+After=raspotify.service
+
+[Service]
+Type=simple
+# Change User/WorkingDirectory if you installed somewhere other than /opt/hexplayer
+# setup.sh patches these paths automatically during installation.
+User=pi
+WorkingDirectory=/opt/hexplayer
+EnvironmentFile=/opt/hexplayer/.env
+ExecStart=/opt/hexplayer/venv/bin/python3 /opt/hexplayer/hexplayer.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hexplayer
+
+# Give the SPI device access to the pi user (usually in group 'spi')
+SupplementaryGroups=spi gpio
+
+[Install]
+WantedBy=multi-user.target
