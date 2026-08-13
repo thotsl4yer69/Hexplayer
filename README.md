@@ -1,320 +1,254 @@
-# 🎵 HexPlayer
+# HexPlayer
 
-> A compact, headless Spotify player for Raspberry Pi Zero 2 W — tap a 3D-printed hexagonal NFC tile to instantly start any playlist, album, or track. No phone, no screen, no fuss.
+**A physical music interface: tap an NFC tile, start the mapped Spotify item.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://python.org)
-[![Raspberry Pi OS Bookworm](https://img.shields.io/badge/Pi%20OS-Bookworm-red.svg)](https://www.raspberrypi.com/software/)
+[![Status](https://img.shields.io/badge/status-bench%20prototype-blue)](PROJECT_STATUS.md)
+![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%20Zero%202%20W-red)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
----
+> **Maturity: Bench prototype.** The core idea is intentionally simple: physical tiles become a tangible library for digital music. Exact reader, audio and playback configuration should be validated against the hardware revision in use. See [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
-## Table of Contents
+## Product idea
 
-- [How It Works](#how-it-works)
-- [Hardware Shopping List](#hardware-shopping-list)
-- [Hardware Pinout](#hardware-pinout)
-- [Step-by-Step Setup](#step-by-step-setup)
-- [Adding New Tiles](#adding-new-tiles)
-- [File Reference](#file-reference)
-- [3D Print Files](#3d-print-files)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
+HexPlayer is a compact, headless Raspberry Pi music player built around a physical interaction instead of a touchscreen. A registered NFC/contactless tag is read, mapped to a Spotify URI, and handed to the configured playback device.
 
----
+The intended experience is closer to choosing a record than opening an app:
 
-## How It Works
-
-```
-┌─────────────┐     SPI      ┌──────────────────┐     Wi-Fi / API     ┌──────────┐
-│  NFC Tile   │────────────▶│  hexplayer.py     │───────────────────▶│ Spotify  │
-│ (RC522 tag) │             │  (Pi Zero 2 W)    │                     │  Cloud   │
-└─────────────┘             └──────────────────┘                     └──────────┘
-                                      │
-                                      │ I2S / PCM
-                                      ▼
-                             ┌──────────────────┐
-                             │  I2S Amp HAT     │
-                             │  → Speaker 🔊    │
-                             └──────────────────┘
+```text
+       physical tile
+            │
+            ▼
+      RC522 reader
+        over SPI
+            │
+            ▼
+     Raspberry Pi Zero 2 W
+       hexplayer.py
+          │      │
+          │      └──── local mapping (tiles.json)
+          │
+          ▼
+    Spotify playback target
+          │
+          ▼
+       audio output
 ```
 
-1. **Tap a tile** — the RC522 NFC reader detects the tile UID over SPI.
-2. **Lookup** — `hexplayer.py` looks up the UID in `tiles.json`.
-3. **Play** — Spotify Web API sends playback to the Raspotify Connect device on the Pi.
-4. **Listen** — audio streams through the I2S amp HAT to your speaker.
+The system is designed to run without using a phone as the day-to-day control surface. A browser/other device may still be needed for initial Spotify authentication and account setup.
 
----
+## Demonstrated engineering work
 
-## Hardware Shopping List
+- Raspberry Pi/Linux deployment;
+- SPI hardware integration;
+- RC522 / ISO 14443A contactless-tag reading;
+- UID-to-media mapping;
+- Python daemon/service work;
+- Spotify URI/API/OAuth integration;
+- systemd deployment;
+- I2S/audio-device integration;
+- physical tile / 3D-print product concept.
 
-| # | Component | Notes |
-|---|-----------|-------|
-| 1 | **Raspberry Pi Zero 2 W** | Wi-Fi + quad-core Cortex-A53 |
-| 2 | **RC522 NFC Reader** breakout | ~$3–5, SPI interface, 13.56 MHz |
-| 3 | **NFC stickers** NTAG213 / NTAG215 | 1 per tile; 25 mm round |
-| 4 | **I2S Amp HAT** (HiFiBerry DAC+ Zero or MAX98357A) | Plugs onto 40-pin header |
-| 5 | **Passive speaker** | 4–8 Ω, 3–5 W |
-| 6 | **Micro SD card** ≥ 8 GB | Class 10 / A1 recommended |
-| 7 | **5 V / 3 A USB-C power supply** | Pi Zero 2 W needs ≥ 2.5 A |
-| 8 | **8× female-to-female jumper wires** | RC522 to Pi header |
-| 9 | **3D-printed hex tiles** | See [3D Print Files](#3d-print-files) |
+## Hardware reference build
 
----
+| Component | Reference |
+|---|---|
+| Compute | Raspberry Pi Zero 2 W |
+| Reader | MFRC522 / RC522 breakout, 3.3 V logic |
+| Tags | Compatible 13.56 MHz ISO 14443A / NTAG-family tags |
+| Audio | Compatible I2S DAC/amp or other configured Pi audio path |
+| Speaker | Matched to the selected amplifier |
+| Storage | microSD card |
+| Power | **5 V supply through the Pi Zero 2 W micro-USB power input** |
+| Enclosure/media | 3D-printed hexagonal tiles + embedded/attached tags |
 
-## Hardware Pinout
+> **Electrical warning:** power the RC522 from **3.3 V**, not 5 V. Verify the pinout of the exact breakout board before wiring it.
 
-See [`docs/hardware-pinout.md`](docs/hardware-pinout.md) for the full GPIO diagram.
+## RC522 reference wiring
 
-Quick reference — RC522 to Pi Zero 2 W:
+See [`docs/hardware-pinout.md`](docs/hardware-pinout.md) for the hardware guide.
 
-| RC522 | Pi GPIO (BCM) | Physical Pin |
-|-------|--------------|--------------|
-| VCC   | 3.3 V        | Pin 1        |
-| GND   | GND          | Pin 6        |
-| MOSI  | GPIO 10      | Pin 19       |
-| MISO  | GPIO 9       | Pin 21       |
-| SCK   | GPIO 11      | Pin 23       |
-| SDA   | GPIO 8       | Pin 24       |
-| RST   | GPIO 25      | Pin 22       |
+| RC522 | Raspberry Pi signal | BCM GPIO | Physical pin |
+|---|---|---:|---:|
+| VCC | 3.3 V | — | 1 |
+| GND | Ground | — | 6 |
+| MOSI | SPI0 MOSI | 10 | 19 |
+| MISO | SPI0 MISO | 9 | 21 |
+| SCK | SPI0 SCLK | 11 | 23 |
+| SDA / SS | SPI0 CE0 | 8 | 24 |
+| RST | Reset GPIO | 25 | 22 |
 
-> ⚠️ Use **3.3 V** only — never 5 V. The RC522 is not 5 V tolerant.
+The RC522 SPI signals above do not use the normal PCM/I2S GPIOs. However, **audio HAT pin usage varies by board**, so verify the chosen HAT's complete GPIO requirements before stacking or wiring both devices.
 
-The I2S HAT plugs directly onto the 40-pin header. GPIO 18, 19, 21 are used for I2S
-and do **not** conflict with SPI.
+## Software flow
 
----
+1. The reader detects a registered tag.
+2. `hexplayer.py` resolves its UID in `tiles.json`.
+3. The mapped Spotify URI is submitted to the configured playback path.
+4. Audio plays through the Pi's configured output device.
+5. The mapping file can be updated using `register.py` without rebuilding the application.
 
-## Step-by-Step Setup
+## Installation
 
-### 1 — Flash Raspberry Pi OS Lite (Bookworm)
+### 1. Prepare Raspberry Pi OS
 
-1. Download [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
-2. Choose **Raspberry Pi OS Lite (64-bit)** — Bookworm.
-3. In Imager settings (⚙️ gear icon): set hostname, enable SSH, configure Wi-Fi.
-4. Flash to SD card, insert into Pi, power on.
+Use a supported Raspberry Pi OS release for the Pi Zero 2 W, configure networking and SSH if you want headless administration, then boot the Pi.
 
-### 2 — Connect hardware
+### 2. Wire and verify the reader
 
-Wire the RC522 to the Pi header as shown in the pinout table above.
-Seat the I2S HAT on top of the 40-pin header.
-
-### 3 — SSH into the Pi
+Connect the RC522 using the reference table above and enable SPI.
 
 ```bash
-ssh pi@hexplayer.local   # or use the IP address
+ls /dev/spidev*
 ```
 
-### 4 — Clone this repository
+A normal SPI0 configuration should expose the relevant `/dev/spidev0.*` device(s).
+
+### 3. Clone the project
 
 ```bash
 git clone https://github.com/thotsl4yer69/Hexplayer.git
 cd Hexplayer
 ```
 
-### 5 — Run the one-click setup script
+### 4. Review the setup script before running it
 
 ```bash
+less setup.sh
 chmod +x setup.sh
 ./setup.sh
 ```
 
-This script:
-- Installs system dependencies
-- Enables SPI
-- Configures the I2S audio overlay
-- Installs [Raspotify](https://github.com/dtcooper/raspotify) (Spotify Connect)
-- Creates a Python virtualenv and installs pip packages
-- Copies `.env.example` → `.env`
-- Installs and enables the `hexplayer` systemd service
+The setup path installs required software, configures the project environment and installs the systemd service. Audio overlays and third-party playback packages can change over time, so verify the script against the current Raspberry Pi OS release rather than treating it as an immutable appliance image.
 
-> ⚠️ A **reboot** is required after setup to activate SPI and the I2S overlay:
-> ```bash
-> sudo reboot
-> ```
+Reboot if the setup changed SPI, audio overlays or boot configuration.
 
-### 6 — Add your Spotify credentials
+### 5. Configure credentials
 
-Create a Spotify app at <https://developer.spotify.com/dashboard>:
-
-1. Click **Create App**.
-2. Set **Redirect URI** to `http://localhost:8888/callback`.
-3. Copy the **Client ID** and **Client Secret**.
-
-Edit `.env`:
+Copy/configure the example environment file without committing secrets:
 
 ```bash
+cp .env.example .env
 nano .env
 ```
 
-Fill in:
+The project expects the Spotify/application values documented in `.env.example` and the configured playback-device name.
 
-```dotenv
-SPOTIFY_CLIENT_ID=your_client_id
-SPOTIFY_CLIENT_SECRET=your_client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
-DEVICE_NAME=HexPlayer
-```
+### 6. Complete authentication
 
-### 7 — Authenticate with Spotify
-
-Run `hexplayer.py` once manually to complete OAuth:
+Run the application interactively once when needed to establish the OAuth/token state required by the configured Spotify path:
 
 ```bash
 source venv/bin/activate
 python3 hexplayer.py
 ```
 
-A URL will be printed. Open it in a browser on **any device** on the same network,
-log in, and copy the redirected URL back to the terminal. A `.spotify_cache` token
-file is saved and used for all future authentication.
+Do not commit cached OAuth tokens or real client secrets.
 
-### 8 — Register your first tile
+### 7. Register a tile
 
 ```bash
 python3 register.py
 ```
 
-1. Paste a Spotify URI when prompted (e.g. `spotify:playlist:37i9dQZF1DXcBWIGoYBM5M`).
-2. Tap the NFC tile.
-3. Mapping is saved to `tiles.json` automatically.
+Associate the detected tag UID with the intended Spotify URI. The mapping is stored locally in `tiles.json`.
 
-**Finding Spotify URIs:** Right-click any playlist, album, or track in the desktop
-Spotify app → **Share** → **Copy Spotify URI**.
-
-### 9 — Start the service
+### 8. Run as a service
 
 ```bash
 sudo systemctl start hexplayer
 sudo systemctl status hexplayer
-```
-
-Tap a registered tile — music starts immediately! 🎶
-
-Check logs any time:
-
-```bash
 journalctl -u hexplayer -f
 ```
 
----
+## Repository layout
 
-## Adding New Tiles
-
-Run the registration tool at any time:
-
-```bash
-cd ~/Hexplayer
-source venv/bin/activate
-python3 register.py
-```
-
-Choose the interactive menu to:
-- Register a new tile
-- List all tiles
-- Delete a tile by UID
-
-`tiles.json` is reloaded automatically by the daemon on every tile tap — no restart needed.
-
----
-
-## File Reference
-
-```
+```text
 Hexplayer/
-├── README.md                   ← This file
-├── .env.example                ← Copy to .env and fill in credentials
-├── .gitignore
-├── requirements.txt            ← Python dependencies
-├── setup.sh                    ← One-click installer
-├── hexplayer.py                ← Main player daemon (run as systemd service)
-├── register.py                 ← Interactive tile registration tool
-├── tiles.json                  ← NFC UID → Spotify URI map (gitignored)
+├── README.md
+├── PROJECT_STATUS.md
+├── .env.example
+├── requirements.txt
+├── setup.sh
+├── hexplayer.py
+├── register.py
 ├── systemd/
-│   └── hexplayer.service       ← systemd unit file
+│   └── hexplayer.service
 ├── docs/
-│   ├── hardware-pinout.md      ← GPIO wiring diagram
-│   └── 3d-printing-tiles.md    ← Print settings and tile geometry
+│   ├── hardware-pinout.md
+│   └── 3d-printing-tiles.md
 └── LICENSE
 ```
 
----
+Runtime secrets, OAuth cache data and personal tile mappings should remain outside version control.
 
-## 3D Print Files
+## 3D-printed tiles
 
-Hex tile STL / 3MF files will be linked here once published.
-
-- **Printables:** *(coming soon)*
-- **Thingiverse:** *(coming soon)*
-
-See [`docs/3d-printing-tiles.md`](docs/3d-printing-tiles.md) for print settings,
-NFC sticker placement, and labelling tips.
-
----
+The repository documents the tile concept and print guidance under [`docs/3d-printing-tiles.md`](docs/3d-printing-tiles.md). Publishing final STL/3MF assets is still part of the productisation work; the README no longer points to placeholder external listings as if they already exist.
 
 ## Troubleshooting
 
-### No audio / I2S HAT not detected
+### Reader not responding
 
 ```bash
-aplay -l          # list audio devices
-arecord -l        # should show your DAC
+ls /dev/spidev*
+sudo dmesg | grep -i spi
+```
+
+Check:
+
+- SPI is enabled;
+- VCC is 3.3 V;
+- CE/SS and reset pins match the software configuration;
+- jumper connections are secure;
+- the tag is compatible with the reader.
+
+### No playback audio
+
+```bash
+aplay -l
 cat /proc/asound/cards
 ```
 
-- Ensure the dtoverlay line in `/boot/firmware/config.txt` matches your HAT:
-  - HiFiBerry DAC+ Zero: `dtoverlay=hifiberry-dac`
-  - MAX98357A (Adafruit): `dtoverlay=hifiberry-dac` (same overlay)
-- Disable onboard audio: `dtparam=audio=off`
+Confirm the selected playback device appears and that the boot overlay/configuration matches the **exact** DAC/amp board in use. Do not assume one vendor's overlay applies to every I2S amplifier.
 
-### SPI / RC522 not working
+### Playback target unavailable
 
-```bash
-ls /dev/spidev*           # should show /dev/spidev0.0
-sudo dmesg | grep spi     # check for SPI messages
-```
-
-- Run `sudo raspi-config` → **Interface Options** → **SPI** → Enable.
-- Re-seat jumper wires; check for loose connections on the RC522.
-- Confirm VCC is 3.3 V, not 5 V.
-
-### Spotify device not found
+Check the playback service and its logs, for example:
 
 ```bash
-journalctl -u raspotify -f    # check Raspotify logs
 systemctl status raspotify
+journalctl -u raspotify -n 100
 ```
 
-- Ensure Raspotify is running: `sudo systemctl start raspotify`
-- Check `DEVICE_NAME` in `.env` matches the Raspotify device name.
-- Open Spotify on any device — the Pi should appear under **Devices**.
+Then verify that the device name configured for HexPlayer matches the actual playback target.
 
-### Auth / token errors
+### Authentication errors
 
-```bash
-rm .spotify_cache   # delete cached token and re-authenticate
-python3 hexplayer.py
-```
+If a cached token is invalid, remove/recreate it only after confirming the path and that it contains no data you need to preserve. Re-run the interactive authentication flow afterward.
 
-### Tile reads inconsistently
+### Inconsistent tag reads
 
-- Ensure the NFC sticker is within 5 mm of the RC522 antenna surface.
-- Check `DEBOUNCE_SECONDS` in `.env` — lower it if tiles feel sluggish.
-- Try a different NFC sticker type (NTAG215 has better range than NTAG213).
+- test the tag directly over the reader antenna;
+- remove metal or conductive material near the tag/antenna;
+- verify supply voltage and wiring;
+- test another known-compatible tag;
+- tune debounce behaviour only after confirming the hardware path is stable.
 
-### Service won't start
+## Evidence boundary
 
-```bash
-journalctl -u hexplayer -n 50   # last 50 log lines
-sudo systemctl status hexplayer
-```
+HexPlayer is currently a **bench prototype**, not a finished consumer appliance. Playback-account requirements, third-party APIs, Raspotify behaviour and Raspberry Pi OS packaging can change independently of this repository.
 
-Common causes:
-- `.env` missing or credentials incorrect.
-- `venv/` not created (re-run `./setup.sh`).
-- SPI or I2S overlay not loaded (reboot after editing `/boot/firmware/config.txt`).
+Hardware claims should be tied to a tested build, and future enclosure/audio variants should each document their own wiring and power assumptions.
 
----
+## Development provenance
+
+HexPlayer is an authored MAZLABZ project developed with AI-assisted engineering workflows. AI has supported implementation and troubleshooting; product definition, hardware selection, physical integration and verification remain the project owner's responsibility.
+
+## Portfolio significance
+
+HexPlayer is deliberately small compared with the edge-AI systems. That is useful: it demonstrates the complete loop from **physical interaction → electronics → Linux service → API → media output** in a product idea that is immediately understandable.
 
 ## License
 
-[MIT](LICENSE) — see the LICENSE file for details.
+[MIT](LICENSE)
