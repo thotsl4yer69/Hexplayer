@@ -1,10 +1,17 @@
-# HexPlayer - gitignore
-
-# Secrets and credentials
+# HexPlayer — local secrets / credentials
 .env
+.env.local
+.env.*.local
+.spotify_cache
+.spotify-cache
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Tile registry (contains user-specific NFC mappings)
 tiles.json
+tiles.local.json
 
 # Python
 __pycache__/
@@ -15,16 +22,23 @@ __pycache__/
 venv/
 env/
 .venv/
+ENV/
 *.egg-info/
 dist/
 build/
 *.egg
+.pytest_cache/
 
-# Logs
+# Logs / runtime
 *.log
 logs/
+*.pid
 
-# IDE / Editor
+# Backups / archives
+*.bak
+*.zip
+
+# IDE / editor
 .vscode/
 .idea/
 *.swp
@@ -34,9 +48,3 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
-
-# Virtual environment
-.env/
-.venv/
-venv/
-ENV/
