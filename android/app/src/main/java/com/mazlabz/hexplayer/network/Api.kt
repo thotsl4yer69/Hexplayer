@@ -10,38 +10,53 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-private class JsonHttpClient(
-    private val baseUrl: String,
-    private val bearer: String,
-) {
-    fun request(method: String, path: String, body: JSONObject? = null): JSONObject {
-        val base = baseUrl.trim().trimEnd('/')
-        require(base.startsWith("http://") || base.startsWith("https://")) { "Invalid URL" }
-        val conn = (URL(base + path).openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = 6000
-            readTimeout = 9000
-            setRequestProperty("Accept", "application/json")
-            if (bearer.isNotBlank()) setRequestProperty("Authorization", "Bearer $bearer")
-            if (body != null) {
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            }
-        }
-        return try {
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) throw IOException("HTTP $code: ${text.take(400)}")
-            if (text.isBlank()) JSONObject() else JSONObject(text)
-        } finally {
-            conn.disconnect()
-        }
+object TransportPolicy {
+    fun validate(base: String, hasCredentials: Boolean) {
+        val url = java.net.URI(base)
+        require(url.scheme in listOf("http", "https") && !url.host.isNullOrBlank() && url.userInfo == null && url.query == null && url.fragment == null) { "Enter an HTTP(S) server URL without credentials, query or fragment" }
+        val loopback = url.host in listOf("localhost", "127.0.0.1", "[::1]", "::1")
+        require(!hasCredentials || url.scheme == "https" || loopback) { "Credentials require HTTPS or a loopback tunnel. Use manual server setup for trusted LAN HTTP." }
     }
 }
-
-class HexPlayerClient(baseUrl: String, apiKey: String) {
+internal class JsonHttpClient(private val baseUrl: String, private val bearer: String) {
+    fun requestValue(method: String, path: String, body: JSONObject? = null): Any {
+        val base = baseUrl.trim().trimEnd('/')
+        TransportPolicy.validate(base, bearer.isNotBlank())
+        val conn = URL(base + path).openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = method
+            conn.instanceFollowRedirects = false
+            conn.connectTimeout = 6000
+            conn.readTimeout = 9000
+            conn.setRequestProperty("Accept", "application/json")
+            if (bearer.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer $bearer")
+            if (body != null) {
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            }
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) {
+                // Never reflect server response bodies which can include upstream secrets.
+                val reason = when (code) {
+                    400 -> "Invalid request; check the mapping fields"
+                    401, 403 -> "Access denied; check credentials and secure server setup"
+                    404 -> "Mapping or endpoint not found"
+                    502 -> "Upstream playback / Home Assistant request failed"
+                    503 -> "Service is not configured or unavailable"
+                    in 300..399 -> "Redirect refused; enter the final HTTPS server URL"
+                    else -> "Server request failed"
+                }
+                throw IOException("HTTP $code: $reason")
+            }
+            return if (text.isBlank()) JSONObject() else org.json.JSONTokener(text).nextValue()
+        } finally { conn.disconnect() }
+    }
+    fun request(method: String, path: String, body: JSONObject? = null): JSONObject =
+        requestValue(method, path, body) as? JSONObject ?: throw IOException("Server returned an unexpected JSON schema")
+}
+class HexPlayerClient(private val baseUrl: String, apiKey: String) {
     private val http = JsonHttpClient(baseUrl, apiKey)
 
     fun health(): Boolean = http.request("GET", "/api/v1/health").optBoolean("ok")
@@ -99,6 +114,8 @@ class HexPlayerClient(baseUrl: String, apiKey: String) {
     }
 
     fun provisionHomeAssistant(url: String, token: String) {
+        TransportPolicy.validate(baseUrl, true)
+        TransportPolicy.validate(url, true)
         http.request("PUT", "/api/v1/home-assistant/config", JSONObject().put("url", url).put("token", token))
     }
 }
@@ -109,44 +126,23 @@ class HomeAssistantClient(baseUrl: String, token: String) {
     fun health(): Boolean = http.request("GET", "/api/").optString("message").isNotBlank()
 
     fun mediaPlayers(): List<MediaPlayer> {
-        val base = baseUrlForRaw()
-        val conn = (URL("$base/api/states").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 6000
-            readTimeout = 9000
-            setRequestProperty("Authorization", "Bearer ${tokenForRaw()}")
-            setRequestProperty("Accept", "application/json")
-        }
-        try {
-            val code = conn.responseCode
-            val text = (if (code in 200..299) conn.inputStream else conn.errorStream).bufferedReader().use { it.readText() }
-            if (code !in 200..299) throw IOException("HTTP $code: ${text.take(400)}")
-            val arr = org.json.JSONArray(text)
-            return (0 until arr.length()).mapNotNull { index ->
-                val state = arr.getJSONObject(index)
-                val entityId = state.optString("entity_id")
-                if (!entityId.startsWith("media_player.")) return@mapNotNull null
-                val attrs = state.optJSONObject("attributes") ?: JSONObject()
-                MediaPlayer(
-                    entityId = entityId,
-                    name = attrs.optString("friendly_name", entityId),
-                    state = state.optString("state"),
-                    volume = if (attrs.has("volume_level") && !attrs.isNull("volume_level")) attrs.optDouble("volume_level") else null,
-                    mediaTitle = attrs.optString("media_title").takeIf { it.isNotBlank() },
-                )
-            }.sortedBy { it.name }
-        } finally {
-            conn.disconnect()
-        }
+        val arr = http.requestValue("GET", "/api/states") as? org.json.JSONArray ?: throw IOException("Unexpected states schema")
+        return (0 until arr.length()).mapNotNull { index ->
+            val state = arr.getJSONObject(index)
+            val entityId = state.optString("entity_id")
+            if (!entityId.startsWith("media_player.")) return@mapNotNull null
+            val attrs = state.optJSONObject("attributes") ?: JSONObject()
+            MediaPlayer(
+                entityId = entityId,
+                name = attrs.optString("friendly_name", entityId),
+                state = state.optString("state"),
+                volume = if (attrs.has("volume_level") && !attrs.isNull("volume_level")) attrs.optDouble("volume_level") else null,
+                mediaTitle = attrs.optString("media_title").takeIf { it.isNotBlank() },
+            )
+        }.sortedBy { it.name }
     }
 
     fun service(domain: String, service: String, data: JSONObject) {
-        http.request("POST", "/api/services/$domain/$service", data)
+        http.requestValue("POST", "/api/services/$domain/$service", data)
     }
-
-    // Kept private so credentials remain encapsulated in this client.
-    private val rawBase: String = baseUrl.trim().trimEnd('/')
-    private val rawToken: String = token
-    private fun baseUrlForRaw() = rawBase
-    private fun tokenForRaw() = rawToken
 }

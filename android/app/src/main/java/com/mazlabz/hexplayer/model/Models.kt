@@ -46,11 +46,7 @@ data class CardAction(
         }
     }
 
-    private fun parseData(): JSONObject? = try {
-        if (dataJson.isBlank()) null else JSONObject(dataJson)
-    } catch (_: Exception) {
-        null
-    }
+    private fun parseData(): JSONObject? = if (dataJson.isBlank()) null else JSONObject(dataJson)
 
     companion object {
         fun fromJson(json: JSONObject): CardAction {
@@ -89,5 +85,10 @@ data class PlayerState(
 )
 
 object UidCodec {
+    fun normalize(value: String): String? {
+        val hex = value.trim().replace("-", "" ).replace(":", "" ).uppercase()
+        if (!hex.matches(Regex("[0-9A-F]{8,20}")) || hex.length % 2 != 0) return null
+        return hex.chunked(2).joinToString("-")
+    }
     fun format(bytes: ByteArray): String = bytes.joinToString("-") { "%02X".format(it.toInt() and 0xFF) }
 }
