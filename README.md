@@ -249,6 +249,15 @@ HexPlayer is an authored MAZLABZ project developed with AI-assisted engineering 
 
 HexPlayer is deliberately small compared with the edge-AI systems. That is useful: it demonstrates the complete loop from **physical interaction → electronics → Linux service → API → media output** in a product idea that is immediately understandable.
 
+## Android controller
+
+See [controller setup and NFC limitations](docs/android-controller.md). Android
+and daemon sources are checked in directly; no source-materialization action is
+needed. From `android`, run `./gradlew :app:assembleDebug :app:testDebugUnitTest
+:app:lintDebug` (Windows: `gradlew.bat`) with JDK 21 and Android SDK 36. The wrapper
+pins Gradle 9.6.0 with the official distribution checksum. Debug builds are test
+signed; physical phone/NFC/audio verification remains a separate step.
+
 ## License
 
 [MIT](LICENSE)

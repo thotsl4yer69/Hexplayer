@@ -12,6 +12,7 @@
 # Tile registry (contains user-specific NFC mappings)
 tiles.json
 tiles.local.json
+.runtime_secrets.json
 
 # Python
 __pycache__/
@@ -48,3 +49,10 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Android local build state and signing material
+.gradle/
+.kotlin/
+local.properties
+*.jks
+*.keystore
