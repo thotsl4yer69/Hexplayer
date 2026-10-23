@@ -249,6 +249,10 @@ HexPlayer is an authored MAZLABZ project developed with AI-assisted engineering 
 
 HexPlayer is deliberately small compared with the edge-AI systems. That is useful: it demonstrates the complete loop from **physical interaction → electronics → Linux service → API → media output** in a product idea that is immediately understandable.
 
+## MAZLABZ illustrated goods
+
+For fellow electronics makers: **[Solder Club — Raccoon Electronics Workshop](https://www.redbubble.com/i/hoodie/Solder-Club-Raccoon-Electronics-Workshop-by-ThotSl4yer69/184817513/2j5j)** is a separate MAZLABZ artwork available on Redbubble. Optional art link, not hardware or part of HexPlayer.
+
 ## License
 
 [MIT](LICENSE)
