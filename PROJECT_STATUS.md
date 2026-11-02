@@ -25,3 +25,7 @@ Authored MAZLABZ project developed with AI-assisted engineering workflows. AI as
 ## Portfolio takeaway
 
 HexPlayer is a compact example of **turning a physical interaction into a complete software/hardware product loop**.
+
+## Fleet reconciliation — 2 November 2026
+
+The 2 October retrospective records a local tile-placement/removal logic change with **16 mocked tests passed**, but the fix was then isolated, not pushed/merged/deployed. The Pi Zero 2 W HexPlayer was deliberately offline in that snapshot and lacked its speaker path. Do not treat mocked tag logic as verified RFID-to-audio operation. Next: confirm physical board and reader, verify UID, speaker/audio, Spotify auth/target, tag removal and reboot recovery. See [fleet audit](https://github.com/thotsl4yer69/fleet/blob/main/FLEET_STATE_2026-11-02.md).
